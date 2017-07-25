@@ -19,6 +19,8 @@ import java.util.Map;
 import okio.Buffer;
 import okio.ByteString;
 
+import java.util.Random;
+
 import static org.fest.assertions.api.Assertions.assertThat;
 
 @RunWith(RobolectricTestRunner.class)
@@ -63,7 +65,7 @@ public class MultipartStreamReaderTest {
         assertThat(body.readUtf8()).isEqualTo("{}");
       }
     };
-    boolean success = reader.readAllParts(callback);
+    boolean success = reader.readAllParts(callback, null);
 
     assertThat(callback.getCallCount()).isEqualTo(1);
     assertThat(success).isTrue();
@@ -96,7 +98,7 @@ public class MultipartStreamReaderTest {
         assertThat(body.readUtf8()).isEqualTo(String.valueOf(getCallCount()));
       }
     };
-    boolean success = reader.readAllParts(callback);
+    boolean success = reader.readAllParts(callback, null);
 
     assertThat(callback.getCallCount()).isEqualTo(3);
     assertThat(success).isTrue();
@@ -112,7 +114,7 @@ public class MultipartStreamReaderTest {
     MultipartStreamReader reader = new MultipartStreamReader(source, "sample_boundary");
 
     CallCountTrackingChunkCallback callback = new CallCountTrackingChunkCallback();
-    boolean success = reader.readAllParts(callback);
+    boolean success = reader.readAllParts(callback, null);
 
     assertThat(callback.getCallCount()).isEqualTo(0);
     assertThat(success).isFalse();
@@ -135,9 +137,60 @@ public class MultipartStreamReaderTest {
     MultipartStreamReader reader = new MultipartStreamReader(source, "sample_boundary");
 
     CallCountTrackingChunkCallback callback = new CallCountTrackingChunkCallback();
-    boolean success = reader.readAllParts(callback);
+    boolean success = reader.readAllParts(callback, null);
 
     assertThat(callback.getCallCount()).isEqualTo(1);
     assertThat(success).isFalse();
+  }
+
+  private static final String CHARS = "ABCDEFGHIJKLMNOPQRTUVWXYZ1234567890";
+
+  private String randomString(int minLength, int maxLength) {
+    Random random = new Random();
+    StringBuilder result = new StringBuilder();
+    int numberOfChars = minLength + (int) ((maxLength - minLength) * random.nextFloat());
+    for (int i = 0; i < numberOfChars; i++) {
+      int index = (int) (random.nextFloat() * CHARS.length());
+      result.append(CHARS.charAt(index));
+    }
+    return result.toString();
+  }
+
+  @Test
+  public void testRandom() throws IOException {
+    for (int i = 0; i < 1000; i++) {
+      final int parts = 10;
+      final String[] randomParts = new String[parts];
+      String content = "preable, should be ignored";
+      for (int j = 0; j < parts - 1; j++) {
+        randomParts[j] = randomString(0, 2000);
+        content += "\r\n--sample_boundary\r\n" + randomParts[j];
+      }
+      randomParts[parts - 1] = randomString(0, 10000000);
+      content += "\r\n--sample_boundary\r\n" +
+              randomParts[parts - 1] +
+              "\r\n--sample_boundary--\r\n" +
+              "epilogue, should be ignored";
+      ByteString response = ByteString.encodeUtf8(content);
+
+      Buffer source = new Buffer();
+      source.write(response);
+
+      MultipartStreamReader reader = new MultipartStreamReader(source, "sample_boundary");
+
+      CallCountTrackingChunkCallback callback = new CallCountTrackingChunkCallback() {
+        @Override
+        public void execute(Map<String, String> headers, Buffer body, boolean done) throws IOException {
+          super.execute(headers, body, done);
+
+          assertThat(done).isEqualTo(getCallCount() == parts);
+          assertThat(body.readUtf8()).isEqualTo(randomParts[getCallCount() - 1]);
+        }
+      };
+      boolean success = reader.readAllParts(callback, null);
+
+      assertThat(callback.getCallCount()).isEqualTo(parts);
+      assertThat(success).isTrue();
+    }
   }
 }

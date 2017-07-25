@@ -54,7 +54,7 @@ public class BundleDownloader {
         // FIXME: there is a bug that makes MultipartStreamReader to never find the end of the
         // multipart message. This temporarily disables the multipart mode to work around it, but
         // it means there is no progress bar displayed in the React Native overlay anymore.
-        //.addHeader("Accept", "multipart/mixed")
+        .addHeader("Accept", "multipart/mixed")
         .build();
     mDownloadBundleFromURLCall = Assertions.assertNotNull(mClient.newCall(request));
     mDownloadBundleFromURLCall.enqueue(new Callback() {
@@ -126,6 +126,16 @@ public class BundleDownloader {
                 } catch (JSONException e) {
                   FLog.e(ReactConstants.TAG, "Error parsing progress JSON. " + e.toString());
                 }
+              }
+            }
+          }, new MultipartStreamReader.ProgressCallback() {
+            @Override
+            public void execute(Map<String, String> headers, long loaded, long total) throws IOException {
+              if ("application/javascript".equals(headers.get("Content-Type"))) {
+                callback.onProgress(
+                    "Downloading JavaScript bundle",
+                    (int) (loaded / 1024),
+                    (int) (total / 1024));
               }
             }
           });
