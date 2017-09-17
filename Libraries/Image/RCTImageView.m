@@ -290,7 +290,7 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init)
     }
 
     __weak RCTImageView *weakSelf = self;
-    if (RCTIsLocalAssetURL(source.request.URL) || [source.request.URL.pathExtension isEqualToString:@"gif"]) {
+    if (RCTIsLocalAssetURL(source.request.URL) || [source.request.URL.pathExtension isEqualToString:@"gif"] || [source.request.URL.scheme isEqualToString: @"assets-library"]) {
       RCTImageLoaderProgressBlock progressHandler = nil;
       if (_onProgress) {
         progressHandler = ^(int64_t loaded, int64_t total) {
